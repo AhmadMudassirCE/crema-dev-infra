@@ -1,0 +1,217 @@
+# =============================================================================
+# Terraform Variables Configuration Example
+# =============================================================================
+# This file provides example values for all configurable parameters in the
+# modular Terraform ECS infrastructure. Copy this file to terraform.tfvars
+# and customize the values for your deployment.
+#
+# Usage:
+#   1. Copy this file: cp terraform.tfvars.example terraform.tfvars
+#   2. Update the values to match your requirements
+#   3. Run: terraform init && terraform plan
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# AWS Configuration (REQUIRED)
+# -----------------------------------------------------------------------------
+# The AWS region where all resources will be created
+aws_region = "us-east-1"
+
+# The availability zone for subnet placement (must be in the specified region)
+# Example: "us-east-1a", "us-west-2b", "eu-west-1c"
+availability_zone = "us-east-1a"
+
+# -----------------------------------------------------------------------------
+# Project Configuration (REQUIRED)
+# -----------------------------------------------------------------------------
+# Project name used for resource naming and tagging
+# This will be used as a prefix for all resource names
+# Example: "myapp" creates resources like "myapp-cluster", "myapp-alb"
+project_name = "myapp"
+
+# -----------------------------------------------------------------------------
+# Network Configuration (OPTIONAL - defaults provided)
+# -----------------------------------------------------------------------------
+# VPC CIDR block - defines the IP address range for your VPC
+# Default: "10.0.0.0/16" (provides 65,536 IP addresses)
+# vpc_cidr = "10.0.0.0/16"
+
+# Public subnet CIDR - must be within VPC CIDR range
+# This subnet hosts the ALB and NAT Gateway
+# Default: "10.0.1.0/24" (provides 256 IP addresses)
+# public_subnet_cidr = "10.0.1.0/24"
+
+# Private subnet CIDR - must be within VPC CIDR range
+# This subnet hosts the ECS tasks (containers)
+# Default: "10.0.2.0/24" (provides 256 IP addresses)
+# private_subnet_cidr = "10.0.2.0/24"
+
+# -----------------------------------------------------------------------------
+# Container Configuration (REQUIRED)
+# -----------------------------------------------------------------------------
+# Docker image to deploy - must be a valid ECR URL or Docker Hub image
+# After creating the infrastructure, push your image to the ECR repository
+# Format: <account-id>.dkr.ecr.<region>.amazonaws.com/<repository-name>:<tag>
+# Example: "123456789012.dkr.ecr.us-east-1.amazonaws.com/myapp:latest"
+container_image = "123456789012.dkr.ecr.us-east-1.amazonaws.com/myapp:latest"
+
+# Port on which your container listens for HTTP traffic
+# The ALB will forward traffic to this port
+# Default: 80
+# Common values: 80 (HTTP), 8080 (alternative HTTP), 3000 (Node.js), 8000 (Python)
+container_port = 80
+
+# -----------------------------------------------------------------------------
+# ECS Task Configuration (OPTIONAL - defaults provided)
+# -----------------------------------------------------------------------------
+# CPU and memory allocation for Fargate tasks
+# IMPORTANT: CPU and memory must be valid combinations per AWS Fargate requirements
+#
+# Valid CPU/Memory Combinations:
+# ┌──────────┬────────────────────────────────────────────────────────────┐
+# │ CPU      │ Memory (MB)                                                │
+# ├──────────┼────────────────────────────────────────────────────────────┤
+# │ 256      │ 512, 1024, 2048                                            │
+# │ 512      │ 1024, 2048, 3072, 4096                                     │
+# │ 1024     │ 2048, 3072, 4096, 5120, 6144, 7168, 8192                   │
+# │ 2048     │ 4096, 5120, 6144, 7168, 8192, 9216, 10240, 11264, 12288,  │
+# │          │ 13312, 14336, 15360, 16384                                 │
+# │ 4096     │ 8192, 9216, 10240, 11264, 12288, 13312, 14336, 15360,     │
+# │          │ 16384, 17408, 18432, 19456, 20480, 21504, 22528, 23552,   │
+# │          │ 24576, 25600, 26624, 27648, 28672, 29696, 30720           │
+# └──────────┴────────────────────────────────────────────────────────────┘
+#
+# CPU units (1 vCPU = 1024 units)
+# Default: "256" (0.25 vCPU)
+task_cpu = "256"
+
+# Memory in MB
+# Default: "512" (0.5 GB)
+task_memory = "512"
+
+# -----------------------------------------------------------------------------
+# Service Configuration (OPTIONAL - defaults provided)
+# -----------------------------------------------------------------------------
+# Number of ECS tasks to run simultaneously
+# Higher values provide better availability and load distribution
+# Default: 1
+# Recommended for production: 2 or more for high availability
+desired_count = 2
+
+# -----------------------------------------------------------------------------
+# SSL/TLS Configuration (OPTIONAL)
+# -----------------------------------------------------------------------------
+# ARN of an ACM (AWS Certificate Manager) certificate for HTTPS support
+# If provided, an HTTPS listener on port 443 will be created
+# If omitted, only HTTP on port 80 will be available
+# 
+# To create a certificate:
+#   1. Go to AWS Certificate Manager in your region
+#   2. Request a public certificate for your domain
+#   3. Complete domain validation
+#   4. Copy the certificate ARN here
+#
+# Example: "arn:aws:acm:us-east-1:123456789012:certificate/12345678-1234-1234-1234-123456789012"
+# certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/12345678-1234-1234-1234-123456789012"
+
+# -----------------------------------------------------------------------------
+# Environment Variables (OPTIONAL)
+# -----------------------------------------------------------------------------
+# Plain text environment variables passed to the container
+# These are stored in the task definition and visible in the AWS console
+# 
+# Use for:
+#   - Non-sensitive configuration (log levels, feature flags)
+#   - Public endpoints and URLs
+#   - Region and environment identifiers
+#
+# DO NOT use for:
+#   - Passwords, API keys, or tokens (use secrets instead)
+#   - Database credentials
+#   - Any sensitive data
+#
+# Example:
+environment_variables = {
+  LOG_LEVEL    = "info"
+  APP_ENV      = "production"
+  REGION       = "us-east-1"
+  FEATURE_FLAG = "enabled"
+}
+
+# -----------------------------------------------------------------------------
+# Secrets Configuration (OPTIONAL)
+# -----------------------------------------------------------------------------
+# Sensitive environment variables from AWS Secrets Manager or SSM Parameter Store
+# Values are NOT stored in the task definition - only ARN references
+# The task execution role is automatically granted permissions to read these secrets
+#
+# Use for:
+#   - Database passwords and connection strings
+#   - API keys and tokens
+#   - OAuth credentials
+#   - Any sensitive configuration data
+#
+# Secrets Manager ARN format:
+#   arn:aws:secretsmanager:<region>:<account-id>:secret:<secret-name>-<random-suffix>
+#
+# SSM Parameter Store ARN format:
+#   arn:aws:ssm:<region>:<account-id>:parameter/<parameter-name>
+#
+# To create secrets:
+#   AWS Secrets Manager:
+#     aws secretsmanager create-secret --name db-password --secret-string "your-password"
+#   
+#   SSM Parameter Store:
+#     aws ssm put-parameter --name /myapp/api-key --value "your-api-key" --type SecureString
+#
+# Example:
+secrets = [
+  # {
+  #   name      = "DATABASE_PASSWORD"
+  #   valueFrom = "arn:aws:secretsmanager:us-east-1:123456789012:secret:db-password-abc123"
+  # },
+  # {
+  #   name      = "DATABASE_URL"
+  #   valueFrom = "arn:aws:secretsmanager:us-east-1:123456789012:secret:db-url-xyz789"
+  # },
+  # {
+  #   name      = "API_KEY"
+  #   valueFrom = "arn:aws:ssm:us-east-1:123456789012:parameter/myapp/api-key"
+  # },
+  # {
+  #   name      = "OAUTH_CLIENT_SECRET"
+  #   valueFrom = "arn:aws:ssm:us-east-1:123456789012:parameter/myapp/oauth-secret"
+  # }
+]
+
+# =============================================================================
+# Additional Notes
+# =============================================================================
+#
+# 1. Required vs Optional Variables:
+#    - REQUIRED: aws_region, availability_zone, project_name, container_image
+#    - OPTIONAL: All other variables have sensible defaults
+#
+# 2. Cost Considerations:
+#    - NAT Gateway: ~$0.045/hour + data transfer costs
+#    - ALB: ~$0.0225/hour + LCU charges
+#    - Fargate: Charged per vCPU-hour and GB-hour
+#    - Estimate costs before deploying to production
+#
+# 3. Security Best Practices:
+#    - Never commit terraform.tfvars to version control
+#    - Use secrets for all sensitive data
+#    - Rotate secrets regularly
+#    - Use least-privilege IAM policies
+#
+# 4. High Availability:
+#    - Set desired_count >= 2 for production
+#    - Consider multi-AZ deployment for critical workloads
+#    - Monitor ECS service health and ALB target health
+#
+# 5. Scaling:
+#    - Adjust task_cpu and task_memory based on application needs
+#    - Monitor CloudWatch metrics to optimize resource allocation
+#    - Consider ECS Service Auto Scaling for variable workloads
+#
+# =============================================================================
