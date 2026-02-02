@@ -12,10 +12,10 @@ resource "aws_eip" "nat" {
   }
 }
 
-# NAT Gateway in public subnet
+# NAT Gateway in first public subnet
 resource "aws_nat_gateway" "main" {
   allocation_id = aws_eip.nat.id
-  subnet_id     = var.public_subnet_id
+  subnet_id     = var.public_subnet_ids[0]
 
   tags = {
     Name      = "${var.project_name}-nat-gateway"

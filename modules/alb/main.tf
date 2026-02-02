@@ -42,15 +42,13 @@ resource "aws_security_group" "alb" {
 }
 
 # Application Load Balancer
-# Note: AWS requires ALBs to span at least 2 availability zones (2 subnets)
-# The current single-subnet configuration will fail at apply time
-# This is a known limitation of the single-AZ architecture design
+# AWS requires ALBs to span at least 2 availability zones (2 subnets)
 resource "aws_lb" "main" {
   name               = "${var.project_name}-alb"
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
-  subnets            = [var.public_subnet_id]
+  subnets            = var.public_subnet_ids
 
   enable_deletion_protection = false
   enable_http2               = true

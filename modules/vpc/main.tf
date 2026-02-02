@@ -1,4 +1,4 @@
-# VPC Module - Network foundation with public and private subnets
+# VPC Module - Network foundation with public and private subnets across multiple AZs
 
 # VPC with DNS support enabled
 resource "aws_vpc" "main" {
@@ -14,34 +14,40 @@ resource "aws_vpc" "main" {
   }
 }
 
-# Public subnet with auto-assign public IP enabled
+# Public subnets with auto-assign public IP enabled (one per AZ)
 resource "aws_subnet" "public" {
+  count = length(var.availability_zones)
+
   vpc_id                  = aws_vpc.main.id
-  cidr_block              = var.public_subnet_cidr
-  availability_zone       = var.availability_zone
+  cidr_block              = var.public_subnet_cidrs[count.index]
+  availability_zone       = var.availability_zones[count.index]
   map_public_ip_on_launch = true
 
   tags = {
-    Name      = "${var.project_name}-public-subnet"
+    Name      = "${var.project_name}-public-subnet-${count.index + 1}"
     Project   = var.project_name
     ManagedBy = "Terraform"
     Module    = "vpc"
     Type      = "public"
+    AZ        = var.availability_zones[count.index]
   }
 }
 
-# Private subnet
+# Private subnets (one per AZ)
 resource "aws_subnet" "private" {
+  count = length(var.availability_zones)
+
   vpc_id            = aws_vpc.main.id
-  cidr_block        = var.private_subnet_cidr
-  availability_zone = var.availability_zone
+  cidr_block        = var.private_subnet_cidrs[count.index]
+  availability_zone = var.availability_zones[count.index]
 
   tags = {
-    Name      = "${var.project_name}-private-subnet"
+    Name      = "${var.project_name}-private-subnet-${count.index + 1}"
     Project   = var.project_name
     ManagedBy = "Terraform"
     Module    = "vpc"
     Type      = "private"
+    AZ        = var.availability_zones[count.index]
   }
 }
 
@@ -57,7 +63,7 @@ resource "aws_internet_gateway" "main" {
   }
 }
 
-# Route table for public subnet
+# Route table for public subnets
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
 
@@ -77,7 +83,7 @@ resource "aws_route" "public_internet" {
   gateway_id             = aws_internet_gateway.main.id
 }
 
-# Route table for private subnet (NAT route will be added by NAT module)
+# Route table for private subnets (NAT route will be added by NAT module)
 resource "aws_route_table" "private" {
   vpc_id = aws_vpc.main.id
 
@@ -90,14 +96,18 @@ resource "aws_route_table" "private" {
   }
 }
 
-# Associate public subnet with public route table
+# Associate public subnets with public route table
 resource "aws_route_table_association" "public" {
-  subnet_id      = aws_subnet.public.id
+  count = length(var.availability_zones)
+
+  subnet_id      = aws_subnet.public[count.index].id
   route_table_id = aws_route_table.public.id
 }
 
-# Associate private subnet with private route table
+# Associate private subnets with private route table
 resource "aws_route_table_association" "private" {
-  subnet_id      = aws_subnet.private.id
+  count = length(var.availability_zones)
+
+  subnet_id      = aws_subnet.private[count.index].id
   route_table_id = aws_route_table.private.id
 }

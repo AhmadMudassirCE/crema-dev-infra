@@ -1,8 +1,8 @@
 # NAT Module Variables
 
-variable "public_subnet_id" {
-  description = "ID of the public subnet for NAT Gateway"
-  type        = string
+variable "public_subnet_ids" {
+  description = "IDs of the public subnets (NAT Gateway will be placed in the first one)"
+  type        = list(string)
 }
 
 variable "private_route_table_id" {

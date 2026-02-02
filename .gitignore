@@ -34,3 +34,5 @@ terraform.rc
 
 # Ignore backend configuration files with sensitive data
 backend.tf
+
+.kiro
