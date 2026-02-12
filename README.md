@@ -1,4 +1,42 @@
-# Modular Terraform ECS Infrastructure
+# Crema Application - AWS ECS Infrastructure
+
+This repository contains Terraform infrastructure code to deploy the Crema Rails application to AWS ECS Fargate with a complete production-ready setup.
+
+## 🚀 Quick Start for Crema Deployment
+
+1. **Review the checklist**: See [PRE_DEPLOYMENT_CHECKLIST.md](PRE_DEPLOYMENT_CHECKLIST.md)
+2. **Follow the guide**: See [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)
+3. **Quick reference**: See [QUICK_REFERENCE.md](QUICK_REFERENCE.md)
+
+## 📋 What Gets Deployed
+
+- **VPC**: Multi-AZ network with public and private subnets
+- **NAT Gateway**: Enables private subnet internet access
+- **Application Load Balancer**: Distributes traffic across containers
+- **ECR Repository**: Stores your Docker images
+- **ECS Cluster & Service**: Runs your Crema application containers
+- **CloudWatch Logs**: Centralized logging
+- **IAM Roles**: Secure permissions for ECS tasks
+- **Security Groups**: Network security controls
+
+## 🔧 Configuration
+
+The infrastructure is configured for the Crema Rails application with:
+- **Container Port**: 3000 (Rails/Puma)
+- **Task Size**: 512 CPU / 1GB Memory (configurable)
+- **Instances**: 2 tasks for high availability
+- **Environment**: All variables stored in SSM Parameter Store
+
+## 📁 Key Files
+
+- `terraform.tfvars` - Your deployment configuration (create from template)
+- `setup-parameters.sh` - Creates SSM parameters for environment variables
+- `push-image.sh` - Pushes Docker image to ECR
+- `DEPLOYMENT_GUIDE.md` - Complete deployment instructions
+- `PRE_DEPLOYMENT_CHECKLIST.md` - Pre-deployment verification
+- `QUICK_REFERENCE.md` - Common commands and operations
+
+## 🏗️ Modular Terraform ECS Infrastructure
 
 A production-ready, modular Terraform infrastructure solution for deploying Docker applications on AWS ECS with proper networking, load balancing, and security.
 

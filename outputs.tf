@@ -37,3 +37,24 @@ output "nat_gateway_ip" {
   description = "Elastic IP of the NAT Gateway"
   value       = module.nat.elastic_ip
 }
+
+output "rds_endpoint" {
+  description = "RDS PostgreSQL endpoint"
+  value       = module.rds.db_instance_endpoint
+}
+
+output "rds_database_name" {
+  description = "Name of the RDS database"
+  value       = module.rds.db_name
+}
+
+output "redis_endpoint" {
+  description = "Redis primary endpoint"
+  value       = module.redis.redis_primary_endpoint_address
+}
+
+output "redis_port" {
+  description = "Redis port"
+  value       = module.redis.redis_port
+}
+

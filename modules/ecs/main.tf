@@ -195,7 +195,7 @@ resource "aws_cloudwatch_log_group" "main" {
   }
 }
 
-# ECS Task Definition
+# ECS Task Definition - Web only (Puma/Rails)
 resource "aws_ecs_task_definition" "main" {
   family                   = var.service_name
   network_mode             = "awsvpc"
@@ -232,7 +232,7 @@ resource "aws_ecs_task_definition" "main" {
         options = {
           "awslogs-group"         = aws_cloudwatch_log_group.main.name
           "awslogs-region"        = data.aws_region.current.id
-          "awslogs-stream-prefix" = "ecs"
+          "awslogs-stream-prefix" = "web"
         }
       }
     }
@@ -265,7 +265,7 @@ resource "aws_ecs_service" "main" {
     container_port   = var.container_port
   }
 
-  health_check_grace_period_seconds = 60
+  health_check_grace_period_seconds = 420  # 7 minutes - allows time for Rails boot + 3 health checks
 
   tags = {
     Name      = var.service_name

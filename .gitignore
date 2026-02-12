@@ -36,3 +36,8 @@ terraform.rc
 backend.tf
 
 .kiro
+
+*.env
+
+# Secrets
+secrets.txt

@@ -115,3 +115,83 @@ variable "secrets" {
   }))
   default = []
 }
+
+
+# Auto-Scaling Configuration
+variable "enable_autoscaling" {
+  description = "Enable auto-scaling for the ECS service"
+  type        = bool
+  default     = false
+}
+
+variable "autoscaling_min_capacity" {
+  description = "Minimum number of tasks"
+  type        = number
+  default     = 1
+}
+
+variable "autoscaling_max_capacity" {
+  description = "Maximum number of tasks"
+  type        = number
+  default     = 4
+}
+
+variable "autoscaling_cpu_enabled" {
+  description = "Enable CPU-based auto-scaling"
+  type        = bool
+  default     = true
+}
+
+variable "autoscaling_cpu_target" {
+  description = "Target CPU utilization percentage for auto-scaling"
+  type        = number
+  default     = 70
+}
+
+variable "autoscaling_memory_enabled" {
+  description = "Enable memory-based auto-scaling"
+  type        = bool
+  default     = false
+}
+
+variable "autoscaling_memory_target" {
+  description = "Target memory utilization percentage for auto-scaling"
+  type        = number
+  default     = 80
+}
+
+variable "autoscaling_alb_requests_enabled" {
+  description = "Enable ALB request count based auto-scaling"
+  type        = bool
+  default     = false
+}
+
+variable "autoscaling_alb_requests_target" {
+  description = "Target number of requests per target for auto-scaling"
+  type        = number
+  default     = 1000
+}
+
+variable "autoscaling_scale_in_cooldown" {
+  description = "Cooldown period (seconds) after scale-in activity"
+  type        = number
+  default     = 300
+}
+
+variable "autoscaling_scale_out_cooldown" {
+  description = "Cooldown period (seconds) after scale-out activity"
+  type        = number
+  default     = 60
+}
+
+variable "alb_arn_suffix" {
+  description = "ARN suffix of the ALB (for ALB request count scaling)"
+  type        = string
+  default     = ""
+}
+
+variable "target_group_arn_suffix" {
+  description = "ARN suffix of the target group (for ALB request count scaling)"
+  type        = string
+  default     = ""
+}
