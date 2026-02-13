@@ -261,3 +261,9 @@ variable "web_autoscaling_scale_out_cooldown" {
   type        = number
   default     = 60
 }
+
+variable "log_retention_days" {
+  description = "CloudWatch log retention in days (applies to all log groups)"
+  type        = number
+  default     = 7
+}

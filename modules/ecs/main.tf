@@ -267,6 +267,11 @@ resource "aws_ecs_service" "main" {
 
   health_check_grace_period_seconds = 420  # 7 minutes - allows time for Rails boot + 3 health checks
 
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+
   tags = {
     Name      = var.service_name
     ManagedBy = "Terraform"

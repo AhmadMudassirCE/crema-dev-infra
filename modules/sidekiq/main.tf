@@ -61,6 +61,11 @@ resource "aws_ecs_service" "sidekiq" {
     assign_public_ip = false
   }
 
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+
   tags = {
     Name      = var.service_name
     ManagedBy = "Terraform"

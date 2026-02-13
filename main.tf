@@ -110,6 +110,9 @@ module "ecs" {
     }
   ])
   
+  # Log retention
+  log_retention_days = var.log_retention_days
+
   # Auto-scaling configuration
   enable_autoscaling           = var.web_enable_autoscaling
   autoscaling_min_capacity     = var.web_autoscaling_min_capacity
@@ -174,4 +177,7 @@ module "scheduled_tasks" {
   ])
   
   scheduled_tasks = var.scheduled_tasks
+
+  # Log retention
+  log_retention_days = var.log_retention_days
 }
