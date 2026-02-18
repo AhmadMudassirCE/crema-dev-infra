@@ -1,0 +1,30 @@
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+      - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      - IMAGE_TAG=${COMMIT_HASH:=latest}
+
+  build:
+    commands:
+      - echo Building Docker image...
+      - docker build -t $ECR_REPOSITORY_URL:latest -f $DOCKERFILE_PATH .
+      - docker tag $ECR_REPOSITORY_URL:latest $ECR_REPOSITORY_URL:$IMAGE_TAG
+
+  post_build:
+    commands:
+      - echo Pushing Docker image to ECR...
+      - docker push $ECR_REPOSITORY_URL:latest
+      - docker push $ECR_REPOSITORY_URL:$IMAGE_TAG
+      - echo Generating imagedefinitions.json for ECS deploy...
+      - printf '[{"name":"%s","imageUri":"%s"}]' $CONTAINER_NAME $ECR_REPOSITORY_URL:$IMAGE_TAG > imagedefinitions.json
+      - echo Forcing new deployment on Sidekiq service...
+      - aws ecs update-service --cluster $ECS_CLUSTER_NAME --service $SIDEKIQ_SERVICE_NAME --force-new-deployment --region $AWS_DEFAULT_REGION
+      - echo Deploy complete.
+
+artifacts:
+  files:
+    - imagedefinitions.json

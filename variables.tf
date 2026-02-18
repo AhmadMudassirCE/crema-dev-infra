@@ -127,6 +127,12 @@ variable "rds_allocated_storage" {
   default     = 20
 }
 
+variable "rds_max_allocated_storage" {
+  description = "Maximum allocated storage for RDS autoscaling in GB (0 to disable)"
+  type        = number
+  default     = 0
+}
+
 variable "database_name" {
   description = "Name of the database to create"
   type        = string
@@ -266,4 +272,44 @@ variable "log_retention_days" {
   description = "CloudWatch log retention in days (applies to all log groups)"
   type        = number
   default     = 7
+}
+
+# Monitoring Configuration
+variable "alert_email" {
+  description = "Email address for CloudWatch alarm notifications"
+  type        = string
+}
+
+# ============================================================
+# CI/CD - CodePipeline Configuration
+# ============================================================
+
+variable "enable_codepipeline" {
+  description = "Enable CodePipeline CI/CD"
+  type        = bool
+  default     = false
+}
+
+variable "codestar_connection_arn" {
+  description = "ARN of the CodeStar connection to GitHub"
+  type        = string
+  default     = ""
+}
+
+variable "github_repo_id" {
+  description = "GitHub repository in format owner/repo"
+  type        = string
+  default     = ""
+}
+
+variable "github_branch" {
+  description = "GitHub branch to trigger pipeline"
+  type        = string
+  default     = "main"
+}
+
+variable "dockerfile_path" {
+  description = "Path to the Dockerfile to build"
+  type        = string
+  default     = "Dockerfile"
 }

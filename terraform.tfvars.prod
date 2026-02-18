@@ -332,3 +332,12 @@ secrets = [
   }
   # DATABASE_URL and REDIS_URL are automatically added by Terraform
 ]
+
+# ============================================================
+# CI/CD - CodePipeline Configuration
+# ============================================================
+enable_codepipeline     = true
+codestar_connection_arn = "<YOUR_CODESTAR_CONNECTION_ARN>"  # Same connection as dev, or create a separate one
+github_repo_id          = "<OWNER/REPO>"                     # e.g. "your-org/crema-app"
+github_branch           = "master-aws"
+dockerfile_path         = "Dockerfile.prod"

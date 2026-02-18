@@ -75,8 +75,9 @@ resource "aws_db_instance" "main" {
 
   # Instance configuration - smallest production-ready size
   instance_class    = var.instance_class
-  allocated_storage = var.allocated_storage
-  storage_type      = "gp3"
+  allocated_storage     = var.allocated_storage
+  max_allocated_storage = var.max_allocated_storage
+  storage_type          = "gp3"
   storage_encrypted = true
 
   # Database configuration

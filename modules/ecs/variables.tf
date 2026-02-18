@@ -68,7 +68,7 @@ variable "task_memory" {
   default     = "512"
 
   validation {
-    condition     = can(regex("^(512|1024|2048|3072|4096|5120|6144|7168|8192|16384|30720)$", var.task_memory))
+    condition     = can(regex("^(512|1024|2048|3072|4096|5120|6144|7168|8192|9216|10240|11264|12288|13312|14336|15360|16384|30720)$", var.task_memory))
     error_message = "Task memory must be a valid value. See AWS Fargate documentation for valid CPU/memory combinations."
   }
 }

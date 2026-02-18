@@ -55,6 +55,7 @@ module "rds" {
   postgres_version    = var.postgres_version
   instance_class      = var.rds_instance_class
   allocated_storage   = var.rds_allocated_storage
+  max_allocated_storage = var.rds_max_allocated_storage
   database_name       = var.database_name
   master_username     = var.database_username
   
@@ -180,4 +181,37 @@ module "scheduled_tasks" {
 
   # Log retention
   log_retention_days = var.log_retention_days
+}
+
+# Monitoring Module - CloudWatch Alarms with SNS Notifications
+module "monitoring" {
+  source = "./modules/monitoring"
+
+  project_name            = var.project_name
+  alert_email             = var.alert_email
+  alb_arn_suffix          = module.alb.alb_arn_suffix
+  target_group_arn_suffix = module.alb.target_group_arn_suffix
+  ecs_cluster_name        = module.ecs.cluster_name
+  ecs_service_name        = module.ecs.service_name
+  rds_instance_identifier = module.rds.db_instance_identifier
+}
+
+# CodePipeline Module - CI/CD for ECS deployments
+module "codepipeline" {
+  source = "./modules/codepipeline"
+  count  = var.enable_codepipeline ? 1 : 0
+
+  project_name             = var.project_name
+  aws_region               = var.aws_region
+  codestar_connection_arn  = var.codestar_connection_arn
+  github_repo_id           = var.github_repo_id
+  github_branch            = var.github_branch
+  dockerfile_path          = var.dockerfile_path
+  ecr_repository_url       = module.ecr.repository_url
+  ecr_repository_arn       = module.ecr.repository_arn
+  ecs_cluster_name         = module.ecs.cluster_name
+  ecs_web_service_name     = module.ecs.service_name
+  ecs_sidekiq_service_name = "${var.project_name}-sidekiq-service"
+  container_name           = "${var.project_name}-web"
+  container_port           = var.container_port
 }

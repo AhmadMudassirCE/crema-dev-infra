@@ -5,6 +5,11 @@ output "db_instance_id" {
   value       = aws_db_instance.main.id
 }
 
+output "db_instance_identifier" {
+  description = "Identifier of the RDS instance for CloudWatch metrics"
+  value       = aws_db_instance.main.identifier
+}
+
 output "db_instance_endpoint" {
   description = "Connection endpoint for the database"
   value       = aws_db_instance.main.endpoint

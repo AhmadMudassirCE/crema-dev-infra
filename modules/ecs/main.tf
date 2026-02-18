@@ -138,7 +138,13 @@ resource "aws_ecs_cluster" "main" {
 
   setting {
     name  = "containerInsights"
-    value = "enabled"
+    value = "enhanced"
+  }
+
+  configuration {
+    execute_command_configuration {
+      logging = "DEFAULT"
+    }
   }
 
   tags = {
@@ -185,7 +191,7 @@ resource "aws_security_group_rule" "ecs_egress_all" {
 
 # CloudWatch Log Group for ECS container logs
 resource "aws_cloudwatch_log_group" "main" {
-  name              = "/ecs/${var.service_name}"
+  name              = "/ecs/${var.service_name}" 
   retention_in_days = var.log_retention_days
 
   tags = {
@@ -280,4 +286,9 @@ resource "aws_ecs_service" "main" {
 
   # Ensure the service waits for the load balancer to be ready
   depends_on = [aws_iam_role_policy_attachment.task_execution_policy]
+
+  # Let the autoscaler manage desired_count - don't reset it on apply
+  lifecycle {
+    ignore_changes = [desired_count]
+  }
 }

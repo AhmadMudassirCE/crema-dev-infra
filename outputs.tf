@@ -58,3 +58,14 @@ output "redis_port" {
   value       = module.redis.redis_port
 }
 
+
+# CI/CD Outputs
+output "pipeline_name" {
+  description = "Name of the CodePipeline"
+  value       = var.enable_codepipeline ? module.codepipeline[0].pipeline_name : null
+}
+
+output "codebuild_project_name" {
+  description = "Name of the CodeBuild project"
+  value       = var.enable_codepipeline ? module.codepipeline[0].codebuild_project_name : null
+}

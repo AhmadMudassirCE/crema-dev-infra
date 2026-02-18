@@ -38,6 +38,12 @@ variable "allocated_storage" {
   default     = 20
 }
 
+variable "max_allocated_storage" {
+  description = "Maximum allocated storage in GB for autoscaling (set higher than allocated_storage to enable)"
+  type        = number
+  default     = 0
+}
+
 variable "database_name" {
   description = "Name of the database to create"
   type        = string
