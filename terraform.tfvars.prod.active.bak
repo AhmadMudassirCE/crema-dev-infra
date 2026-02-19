@@ -1,0 +1,341 @@
+# Crema Production Deployment Configuration
+# Generated from prod.env
+
+# AWS Configuration
+aws_region         = "us-east-1"
+availability_zones = ["us-east-1a", "us-east-1b"]
+
+# Project Configuration
+project_name = "crema-prod"
+
+# Container Configuration
+# After ECR is created, push your image then update this URL
+container_image = "192311643586.dkr.ecr.us-east-1.amazonaws.com/crema-prod-app:latest"
+container_port  = 3000
+
+# SSL Certificate
+certificate_arn = "arn:aws:acm:us-east-1:192311643586:certificate/adec6615-82de-4651-9e30-8b810febd308"
+
+# Web Service Configuration
+web_task_cpu       = "2048" # 2 vCPU
+web_task_memory    = "14336" # 14 GB
+web_desired_count  = 2
+
+# Web Service Auto-Scaling - ENABLED for production
+web_enable_autoscaling           = true
+web_autoscaling_min_capacity     = 2
+web_autoscaling_max_capacity     = 4
+web_autoscaling_cpu_enabled      = true
+web_autoscaling_cpu_target       = 80
+web_autoscaling_memory_enabled   = true
+web_autoscaling_memory_target    = 80
+web_autoscaling_scale_out_cooldown = 60
+web_autoscaling_scale_in_cooldown  = 300
+
+# Sidekiq Service Configuration
+sidekiq_task_cpu      = "1024"
+sidekiq_task_memory   = "2048"
+sidekiq_desired_count = 1
+sidekiq_command       = ["bundle", "exec", "sidekiq", "-c", "5", "-q", "default", "-q", "mailers"]
+
+# RDS PostgreSQL Configuration - Production sized
+postgres_version            = "15.14"
+rds_instance_class          = "db.t4g.medium"   # Production: 2 vCPU, 8 GB RAM
+rds_allocated_storage       = 50                # 50 GB base
+rds_max_allocated_storage   = 100               # Autoscale up to 100 GB
+database_name               = "crema_production"
+database_username           = "crema_admin"
+rds_backup_retention_period = 7
+rds_multi_az                = false  
+rds_deletion_protection     = true    # Protect production DB
+rds_skip_final_snapshot     = false   # Always snapshot before deletion
+
+# Redis ElastiCache Configuration
+redis_version                = "7.0"
+redis_node_type              = "cache.t4g.micro"
+redis_num_cache_nodes        = 1
+redis_snapshot_retention_limit = 5
+redis_multi_az_enabled       = false
+
+# CloudWatch Log Retention - 7 days to control costs
+log_retention_days = 7
+
+# Monitoring - SNS Alert Email
+alert_email = "ahmad.mudassir@cloudelligent.com"
+
+# Scheduled Tasks - EventBridge Scheduler for Rake Tasks
+# All defaulted to DISABLED (enabled = false) for production safety
+# Enable them individually once you've verified the infrastructure is working
+scheduled_tasks = [
+  {
+    name                = "process-brewlists"
+    schedule_expression = "cron(0 8 * * ? *)"  # Daily at 8:00 AM UTC
+    command             = ["bundle", "exec", "rake", "crema:process_brewlists"]
+    enabled             = true
+  },
+  {
+    name                = "process-next-up"
+    schedule_expression = "cron(0 17 * * ? *)"  # Daily at 5:00 PM UTC
+    command             = ["bundle", "exec", "rake", "crema:process_next_up"]
+    enabled             = true
+  },
+  {
+    name                = "daily-run"
+    schedule_expression = "cron(0 6 * * ? *)"  # Daily at 6:00 AM UTC
+    command             = ["bundle", "exec", "rake", "crema:daily_run"]
+    enabled             = true
+  },
+  {
+    name                = "check-daily-stats"
+    schedule_expression = "cron(0 16 * * ? *)"  # Daily at 4:00 PM UTC
+    command             = ["bundle", "exec", "rake", "crema:check_daily_stats"]
+    enabled             = true
+  },
+  {
+    name                = "check-monthly-stats"
+    schedule_expression = "cron(0 15 * * ? *)"  # Daily at 3:00 PM UTC
+    command             = ["bundle", "exec", "rake", "crema:check_monthly_stats"]
+    enabled             = true
+  },
+  {
+    name                = "check-monthly-qau-stats"
+    schedule_expression = "cron(0 15 * * ? *)"  # Daily at 3:00 PM UTC
+    command             = ["bundle", "exec", "rake", "crema:check_monthly_qau_stats"]
+    enabled             = true
+  },
+  {
+    name                = "generate-eom-accounts"
+    schedule_expression = "cron(0 15 * * ? *)"  # Daily at 3:00 PM UTC
+    command             = ["bundle", "exec", "rake", "crema:generate_eom_accounts"]
+    enabled             = true
+  },
+  {
+    name                = "process-workplace-playlists"
+    schedule_expression = "cron(0 8 * * ? *)"  # Daily at 8:00 AM UTC
+    command             = ["bundle", "exec", "rake", "crema:process_workplace_playlists"]
+    enabled             = true
+  },
+  {
+    name                = "update-onboarding-question-points"
+    schedule_expression = "cron(0 4 * * ? *)"  # Daily at 4:00 AM UTC
+    command             = ["bundle", "exec", "rake", "crema:update_onboarding_question_points"]
+    enabled             = true
+  },
+  {
+    name                = "send-pending-gifts"
+    schedule_expression = "cron(30 15 * * ? *)"  # Daily at 3:30 PM UTC
+    command             = ["bundle", "exec", "rake", "crema:send_pending_gifts"]
+    enabled             = true
+  }
+]
+
+# Production Secrets - SSM Parameter Store references using /crema-prod/ prefix
+# Run: load-env-to-ssm-prod.bat prod.env us-east-1
+# Then: generate-secrets-config-prod.bat prod.env 192311643586 us-east-1
+secrets = [
+  {
+    name      = "AUSTINS_PLAYLIST_ID"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/AUSTINS_PLAYLIST_ID"
+  },
+  {
+    name      = "AWS_ACCESS_KEY_ID"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/AWS_ACCESS_KEY_ID"
+  },
+  {
+    name      = "AWS_REGION"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/AWS_REGION"
+  },
+  {
+    name      = "AWS_SECRET_ACCESS_KEY"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/AWS_SECRET_ACCESS_KEY"
+  },
+  {
+    name      = "CREMA_SELLER_ID"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/CREMA_SELLER_ID"
+  },
+  {
+    name      = "DARK_ROAST_BREWLIST_ID"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/DARK_ROAST_BREWLIST_ID"
+  },
+  {
+    name      = "DATABASE_HOST"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/DATABASE_HOST"
+  },
+  {
+    name      = "DATABASE_NAME"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/DATABASE_NAME"
+  },
+  {
+    name      = "DATABASE_PASSWORD"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/DATABASE_PASSWORD"
+  },
+  {
+    name      = "DATABASE_PORT"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/DATABASE_PORT"
+  },
+  {
+    name      = "DATABASE_USERNAME"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/DATABASE_USERNAME"
+  },
+  {
+    name      = "DEFAULT_KEEP_ENABLED_SHIPMENT_SERVICE"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/DEFAULT_KEEP_ENABLED_SHIPMENT_SERVICE"
+  },
+  {
+    name      = "EASYPOST_API_KEY"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/EASYPOST_API_KEY"
+  },
+  {
+    name      = "emilys_picks_brewlist_id"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/emilys_picks_brewlist_id"
+  },
+  {
+    name      = "FACEBOOK_APP_ID"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/FACEBOOK_APP_ID"
+  },
+  {
+    name      = "FACEBOOK_APP_SECRET"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/FACEBOOK_APP_SECRET"
+  },
+  {
+    name      = "FORTY_FIVE_DAY_BREWLIST_ID"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/FORTY_FIVE_DAY_BREWLIST_ID"
+  },
+  {
+    name      = "GIFTING_COFFEE_IDS"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/GIFTING_COFFEE_IDS"
+  },
+  {
+    name      = "GOOGLE_REFRESH_TOKEN"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/GOOGLE_REFRESH_TOKEN"
+  },
+  {
+    name      = "INTERCOM_APP_ID"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/INTERCOM_APP_ID"
+  },
+  {
+    name      = "INVITE_SHEET_ID"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/INVITE_SHEET_ID"
+  },
+  {
+    name      = "KICKSTARTER_CREDIT_STRIPE_ID"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/KICKSTARTER_CREDIT_STRIPE_ID"
+  },
+  {
+    name      = "LANG"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/LANG"
+  },
+  {
+    name      = "LIGHT_ROAST_BREWLIST_ID"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/LIGHT_ROAST_BREWLIST_ID"
+  },
+  {
+    name      = "MAILCHIMP_API_KEY"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/MAILCHIMP_API_KEY"
+  },
+  {
+    name      = "MAILCHIMP_AUDIENCE_ID"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/MAILCHIMP_AUDIENCE_ID"
+  },
+  {
+    name      = "MEDIUM_ROAST_BREWLIST_ID"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/MEDIUM_ROAST_BREWLIST_ID"
+  },
+  {
+    name      = "MIXPANEL_PROJECT_TOKEN"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/MIXPANEL_PROJECT_TOKEN"
+  },
+  {
+    name      = "PAPERTRAIL_API_TOKEN"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/PAPERTRAIL_API_TOKEN"
+  },
+  {
+    name      = "RACK_ENV"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/RACK_ENV"
+  },
+  {
+    name      = "RAILS_ENV"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/RAILS_ENV"
+  },
+  {
+    name      = "RAILS_MAX_THREADS"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/RAILS_MAX_THREADS"
+  },
+  {
+    name      = "RAILS_SERVE_STATIC_FILES"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/RAILS_SERVE_STATIC_FILES"
+  },
+  {
+    name      = "RECAPTCHA_SECRET_KEY"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/RECAPTCHA_SECRET_KEY"
+  },
+  {
+    name      = "RECAPTCHA_SITE_KEY"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/RECAPTCHA_SITE_KEY"
+  },
+  {
+    name      = "REDIS_PROVIDER"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/REDIS_PROVIDER"
+  },
+  {
+    name      = "S3_BUCKET_NAME"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/S3_BUCKET_NAME"
+  },
+  {
+    name      = "SCOUT_KEY"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/SCOUT_KEY"
+  },
+  {
+    name      = "SCOUT_LOG_LEVEL"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/SCOUT_LOG_LEVEL"
+  },
+  {
+    name      = "SCOUT_MONITOR"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/SCOUT_MONITOR"
+  },
+  {
+    name      = "SECRET_KEY_BASE"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/SECRET_KEY_BASE"
+  },
+  {
+    name      = "SECRET_TOKEN"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/SECRET_TOKEN"
+  },
+  {
+    name      = "SENDGRID_EMAIL_VALIDATIOIN_API_KEY"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/SENDGRID_EMAIL_VALIDATIOIN_API_KEY"
+  },
+  {
+    name      = "SENDWITHUS_KEY"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/SENDWITHUS_KEY"
+  },
+  {
+    name      = "SENSIBLE_DEFAULTS"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/SENSIBLE_DEFAULTS"
+  },
+  {
+    name      = "SLACK_CLIENT_ID"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/SLACK_CLIENT_ID"
+  },
+  {
+    name      = "SLACK_CLIENT_SECRET"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/SLACK_CLIENT_SECRET"
+  },
+  {
+    name      = "SLACK_VERIFICATION_TOKEN"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/SLACK_VERIFICATION_TOKEN"
+  },
+  {
+    name      = "STRIPE_PUBLISHABLE_KEY"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/STRIPE_PUBLISHABLE_KEY"
+  },
+  {
+    name      = "STRIPE_SECRET_KEY"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/STRIPE_SECRET_KEY"
+  },
+  {
+    name      = "WEB_CONCURRENCY"
+    valueFrom = "arn:aws:ssm:us-east-1:192311643586:parameter/crema-prod/WEB_CONCURRENCY"
+  }
+  # DATABASE_URL and REDIS_URL are automatically added by Terraform
+]

@@ -1,706 +1,343 @@
-# Crema Application - AWS ECS Infrastructure
+# Crema ECS Infrastructure
 
-This repository contains Terraform infrastructure code to deploy the Crema Rails application to AWS ECS Fargate with a complete production-ready setup.
+Terraform infrastructure for deploying the Crema Rails application on AWS ECS Fargate. This repo manages the complete production environment including networking, database, caching, background jobs, scheduled tasks, monitoring, and CI/CD.
 
-## 🚀 Quick Start for Crema Deployment
-
-1. **Review the checklist**: See [PRE_DEPLOYMENT_CHECKLIST.md](PRE_DEPLOYMENT_CHECKLIST.md)
-2. **Follow the guide**: See [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)
-3. **Quick reference**: See [QUICK_REFERENCE.md](QUICK_REFERENCE.md)
-
-## 📋 What Gets Deployed
-
-- **VPC**: Multi-AZ network with public and private subnets
-- **NAT Gateway**: Enables private subnet internet access
-- **Application Load Balancer**: Distributes traffic across containers
-- **ECR Repository**: Stores your Docker images
-- **ECS Cluster & Service**: Runs your Crema application containers
-- **CloudWatch Logs**: Centralized logging
-- **IAM Roles**: Secure permissions for ECS tasks
-- **Security Groups**: Network security controls
-
-## 🔧 Configuration
-
-The infrastructure is configured for the Crema Rails application with:
-- **Container Port**: 3000 (Rails/Puma)
-- **Task Size**: 512 CPU / 1GB Memory (configurable)
-- **Instances**: 2 tasks for high availability
-- **Environment**: All variables stored in SSM Parameter Store
-
-## 📁 Key Files
-
-- `terraform.tfvars` - Your deployment configuration (create from template)
-- `setup-parameters.sh` - Creates SSM parameters for environment variables
-- `push-image.sh` - Pushes Docker image to ECR
-- `DEPLOYMENT_GUIDE.md` - Complete deployment instructions
-- `PRE_DEPLOYMENT_CHECKLIST.md` - Pre-deployment verification
-- `QUICK_REFERENCE.md` - Common commands and operations
-
-## 🏗️ Modular Terraform ECS Infrastructure
-
-A production-ready, modular Terraform infrastructure solution for deploying Docker applications on AWS ECS with proper networking, load balancing, and security.
-
-## Overview
-
-This infrastructure deploys a complete AWS environment with:
-
-- **VPC** with public and private subnets in a single availability zone
-- **NAT Gateway** for private subnet internet access
-- **ECR Repository** for Docker image storage
-- **Application Load Balancer** (ALB) in public subnet for internet-facing traffic
-- **ECS Fargate Cluster** in private subnet for running containerized applications
-- **CloudWatch Logs** for container logging
-- **IAM Roles** with least-privilege permissions
-- **Security Groups** following AWS best practices
-
-### Architecture
+## Architecture
 
 ```
 Internet
-   ↓
-Application Load Balancer (Public Subnet)
-   ↓
-ECS Fargate Tasks (Private Subnet)
-   ↓
+    │
+    ▼
+Application Load Balancer (Public Subnets - us-east-1a, us-east-1b)
+    │                                         │
+    ▼                                         ▼
+┌─────────────────────┐    ┌──────────────────────────────────┐
+│  ECS Web Service    │    │  Private Subnets                  │
+│  (Fargate, 2 tasks) │    │  ├── RDS PostgreSQL 15            │
+│  Rails + Puma       │    │  ├── ElastiCache Redis 7.0        │
+│  Port 3000          │    │  ├── Sidekiq Service (1 task)     │
+└─────────────────────┘    │  └── Scheduled Rake Tasks         │
+    │                      └──────────────────────────────────┘
+    ▼
 NAT Gateway (Public Subnet) → Internet Gateway → Internet
 ```
 
-**Key Features:**
-- Modular design with reusable components
-- Secure by default with proper network isolation
-- Configurable parameters for different environments
-- Support for environment variables and secrets
-- HTTPS support with SSL certificates
-- Comprehensive CloudWatch logging
+## What Gets Deployed
+
+| Module | Resources | Purpose |
+|--------|-----------|---------|
+| VPC | VPC, 2 public + 2 private subnets, route tables, IGW | Multi-AZ networking |
+| NAT | NAT Gateway, Elastic IP | Private subnet internet access |
+| ALB | Application Load Balancer, target group, listeners | HTTPS traffic distribution |
+| ECR | Container registry with lifecycle policy | Docker image storage |
+| ECS | Fargate cluster, web service, task definitions, auto-scaling | Runs the Rails app |
+| Sidekiq | Fargate service, task definition | Background job processing |
+| RDS | PostgreSQL 15 instance, security group, subnet group | Application database |
+| Redis | ElastiCache replication group | Caching and Sidekiq backend |
+| Scheduled Tasks | EventBridge Scheduler, task definitions | Cron-based rake tasks |
+| Monitoring | CloudWatch alarms, SNS topic | Alerts for ALB, ECS, RDS |
+| CodePipeline | Pipeline, CodeBuild project, IAM roles, S3 artifacts | CI/CD from GitHub |
 
 ## Prerequisites
 
-### Required Tools
-
 - [Terraform](https://www.terraform.io/downloads.html) >= 1.0
 - [AWS CLI](https://aws.amazon.com/cli/) configured with credentials
-- [Docker](https://www.docker.com/get-started) for building and pushing images
+- S3 bucket for Terraform state (e.g., `crema-terraform-state-prod`)
+- CodeStar connection to GitHub in "Available" status
+- ACM certificate for your domain (for HTTPS)
+- Application secrets loaded into SSM Parameter Store
 
-### AWS Account Requirements
+## File Structure
 
-You need an AWS account with appropriate permissions. See [Required AWS Permissions](#required-aws-permissions) below.
-
-### AWS Service Limits
-
-Ensure your AWS account has sufficient limits for:
-- VPCs (default: 5 per region)
-- Elastic IPs (default: 5 per region)
-- ECS Clusters (default: 10,000 per region)
-- Application Load Balancers (default: 50 per region)
-
-## Quick Start
-
-### 1. Clone and Configure
-
-```bash
-# Clone the repository (or copy the files)
-cd terraform-ecs-infrastructure
-
-# Copy the example configuration
-cp terraform.tfvars.example terraform.tfvars
-
-# Edit terraform.tfvars with your settings
-# At minimum, update: aws_region, project_name, container_image
+```
+├── main.tf                      # Root module - wires all modules together
+├── variables.tf                 # All input variable definitions
+├── outputs.tf                   # Terraform outputs (ALB DNS, ECR URL, etc.)
+├── backend.tf                   # S3 backend config (not in git)
+├── backend.tf.example           # Backend template
+├── terraform.tfvars             # Your config values (not in git)
+├── terraform.tfvars.example     # Full annotated example config
+├── modules/
+│   ├── vpc/                     # VPC, subnets, route tables
+│   ├── nat/                     # NAT Gateway + Elastic IP
+│   ├── alb/                     # Load balancer, target group, listeners
+│   ├── ecr/                     # Container registry
+│   ├── ecs/                     # ECS cluster, web service, auto-scaling
+│   ├── sidekiq/                 # Sidekiq background worker service
+│   ├── rds/                     # PostgreSQL database
+│   ├── redis/                   # ElastiCache Redis
+│   ├── scheduled-tasks/         # EventBridge scheduled rake tasks
+│   ├── monitoring/              # CloudWatch alarms + SNS
+│   └── codepipeline/            # CI/CD pipeline
+├── docs/
+│   ├── buildspec.yml.example    # CodeBuild buildspec (copy to app repo)
+│   └── FARGATE_SIZING.md        # CPU/memory sizing guide
+├── examples/                    # Example tfvars for different scenarios
+├── load-env-to-ssm.bat          # Load .env secrets to SSM Parameter Store
+├── generate-secrets-config.bat  # Generate secrets block for tfvars
+└── test/                        # Syntax validation tests
 ```
 
-### 2. Push Docker Image to ECR
+## Getting Started
 
-Before deploying, you need to push your Docker image to ECR:
-
-```bash
-# Initialize Terraform to create the ECR repository
-terraform init
-terraform apply -target=module.ecr
-
-# Get the ECR repository URL from output
-ECR_URL=$(terraform output -raw ecr_repository_url)
-echo "ECR Repository: $ECR_URL"
-
-# Authenticate Docker to ECR
-aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin $ECR_URL
-
-# Build your Docker image
-docker build -t myapp:latest .
-
-# Tag the image for ECR
-docker tag myapp:latest $ECR_URL:latest
-
-# Push to ECR
-docker push $ECR_URL:latest
-
-# Update terraform.tfvars with the ECR image URL
-# container_image = "<ECR_URL>:latest"
-```
-
-### 3. Deploy Infrastructure
+### 1. Configure Backend
 
 ```bash
-# Initialize Terraform
-terraform init
-
-# Review the execution plan
-terraform plan
-
-# Apply the configuration
-terraform apply
-
-# Note the ALB DNS name from outputs
+copy backend.tf.example backend.tf
 ```
 
-### 4. Access Your Application
-
-After deployment completes, access your application using the ALB DNS name:
-
-```bash
-# Get the ALB DNS name
-ALB_DNS=$(terraform output -raw alb_dns_name)
-echo "Application URL: http://$ALB_DNS"
-
-# Test the application
-curl http://$ALB_DNS
-```
-
-**Note:** It may take 2-3 minutes for the ECS tasks to start and pass health checks before the application is accessible.
-
-## Configuration
-
-### Required Variables
-
-Edit `terraform.tfvars` and set these required variables:
+Edit `backend.tf` with your S3 bucket name:
 
 ```hcl
-aws_region        = "us-east-1"        # AWS region for deployment
-availability_zone = "us-east-1a"       # Availability zone for subnets
-project_name      = "myapp"            # Project name for resource naming
-container_image   = "<ECR_URL>:latest" # Docker image URL from ECR
-```
-
-### Optional Variables
-
-```hcl
-# Network Configuration (defaults provided)
-vpc_cidr            = "10.0.0.0/16"    # VPC CIDR block
-public_subnet_cidr  = "10.0.1.0/24"    # Public subnet CIDR
-private_subnet_cidr = "10.0.2.0/24"    # Private subnet CIDR
-
-# Container Configuration
-container_port = 80                     # Port your container listens on
-
-# ECS Task Configuration
-task_cpu    = "256"                     # CPU units (256, 512, 1024, 2048, 4096)
-task_memory = "512"                     # Memory in MB (see valid combinations below)
-
-# Service Configuration
-desired_count = 2                       # Number of tasks to run
-
-# SSL Certificate (for HTTPS)
-certificate_arn = "arn:aws:acm:..."    # ACM certificate ARN (optional)
-
-# Environment Variables
-environment_variables = {
-  LOG_LEVEL = "info"
-  APP_ENV   = "production"
+terraform {
+  backend "s3" {
+    bucket  = "crema-terraform-state-prod"
+    key     = "ecs-infrastructure/terraform.tfstate"
+    region  = "us-east-1"
+    encrypt = true
+  }
 }
+```
 
-# Secrets (from AWS Secrets Manager or SSM Parameter Store)
-secrets = [
+### 2. Configure Variables
+
+```bash
+copy terraform.tfvars.example terraform.tfvars
+```
+
+Edit `terraform.tfvars` with your values. See `terraform.tfvars.example` for a fully annotated reference. Key settings:
+
+```hcl
+aws_region         = "us-east-1"
+availability_zones = ["us-east-1a", "us-east-1b"]
+project_name       = "crema-prod"
+container_image    = "<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/crema-prod-app:latest"
+container_port     = 3000
+certificate_arn    = "arn:aws:acm:us-east-1:<ACCOUNT_ID>:certificate/<CERT_ID>"
+alert_email        = "your-email@example.com"
+```
+
+### 3. Load Secrets to SSM
+
+Before deploying, load your application secrets into SSM Parameter Store:
+
+```bash
+load-env-to-ssm.bat prod.env us-east-1
+```
+
+Then generate the `secrets` block for your tfvars:
+
+```bash
+generate-secrets-config.bat prod.env <ACCOUNT_ID> us-east-1
+```
+
+Paste the output into `terraform.tfvars` under the `secrets` variable.
+
+### 4. Deploy
+
+```bash
+terraform init
+terraform plan
+terraform apply
+```
+
+### 5. Push Docker Image to ECR
+
+After the first deploy, push your Docker image:
+
+```bash
+# Authenticate
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com
+
+# Build and push
+docker build -t crema-prod-app:latest -f Dockerfile.prod .
+docker tag crema-prod-app:latest <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/crema-prod-app:latest
+docker push <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/crema-prod-app:latest
+
+# Force ECS to pull the new image
+aws ecs update-service --cluster crema-prod-cluster --service crema-prod-web-service --force-new-deployment --region us-east-1
+```
+
+## CI/CD Pipeline (CodePipeline)
+
+When enabled, CodePipeline automates deployments on every push to the configured branch.
+
+### How It Works
+
+1. **Source** — Pulls code from GitHub via CodeStar connection
+2. **Build** — CodeBuild builds the Docker image using `buildspec.yml` and pushes to ECR
+3. **Deploy** — ECS rolling deployment updates the web service; Sidekiq is force-redeployed during build
+
+### Setup
+
+1. Create a CodeStar connection in the AWS Console (Developer Tools → Connections)
+2. Authorize it with your GitHub account and confirm status is "Available"
+3. Add the `buildspec.yml` to your application repo root (see `docs/buildspec.yml.example`)
+4. Add these variables to `terraform.tfvars`:
+
+```hcl
+enable_codepipeline     = true
+codestar_connection_arn = "arn:aws:codeconnections:us-east-1:<ACCOUNT_ID>:connection/<CONNECTION_ID>"
+github_repo_id          = "YourOrg/your-repo"
+github_branch           = "master-aws"
+dockerfile_path         = "Dockerfile.prod"
+```
+
+5. Run `terraform apply`
+
+### Important Notes
+
+- CodePipeline triggers automatically on creation (first run pulls latest from the branch)
+- To prevent the initial deployment from affecting running tasks, stop the pipeline execution in the AWS Console immediately after `terraform apply`
+- Subsequent runs only trigger on new pushes to the configured branch
+- The `buildspec.yml` must exist in the root of your application repository
+
+## Scheduled Tasks
+
+Rake tasks are run via EventBridge Scheduler on ECS Fargate. Configure them in `terraform.tfvars`:
+
+```hcl
+scheduled_tasks = [
   {
-    name      = "DATABASE_PASSWORD"
-    valueFrom = "arn:aws:secretsmanager:region:account:secret:name"
+    name                = "daily-run"
+    schedule_expression = "cron(0 6 * * ? *)"
+    command             = ["bundle", "exec", "rake", "crema:daily_run"]
+    enabled             = true
   }
 ]
 ```
 
-### Valid Fargate CPU/Memory Combinations
+Each task runs as a standalone Fargate task using the same container image and secrets as the web service.
 
-| CPU (units) | Memory (MB) |
-|-------------|-------------|
-| 256         | 512, 1024, 2048 |
-| 512         | 1024, 2048, 3072, 4096 |
-| 1024        | 2048, 3072, 4096, 5120, 6144, 7168, 8192 |
-| 2048        | 4096 to 16384 (in 1024 MB increments) |
-| 4096        | 8192 to 30720 (in 1024 MB increments) |
+## Auto-Scaling
 
-## Required AWS Permissions
+The web service supports target-tracking auto-scaling based on CPU and memory utilization:
 
-The AWS user or role running Terraform needs the following permissions:
-
-### VPC and Networking
-- `ec2:CreateVpc`, `ec2:DeleteVpc`, `ec2:DescribeVpcs`
-- `ec2:CreateSubnet`, `ec2:DeleteSubnet`, `ec2:DescribeSubnets`
-- `ec2:CreateInternetGateway`, `ec2:DeleteInternetGateway`, `ec2:AttachInternetGateway`, `ec2:DetachInternetGateway`
-- `ec2:CreateRouteTable`, `ec2:DeleteRouteTable`, `ec2:DescribeRouteTables`
-- `ec2:CreateRoute`, `ec2:DeleteRoute`
-- `ec2:AssociateRouteTable`, `ec2:DisassociateRouteTable`
-- `ec2:AllocateAddress`, `ec2:ReleaseAddress`, `ec2:DescribeAddresses`
-- `ec2:CreateNatGateway`, `ec2:DeleteNatGateway`, `ec2:DescribeNatGateways`
-
-### Security Groups
-- `ec2:CreateSecurityGroup`, `ec2:DeleteSecurityGroup`, `ec2:DescribeSecurityGroups`
-- `ec2:AuthorizeSecurityGroupIngress`, `ec2:RevokeSecurityGroupIngress`
-- `ec2:AuthorizeSecurityGroupEgress`, `ec2:RevokeSecurityGroupEgress`
-- `ec2:CreateTags`, `ec2:DeleteTags`, `ec2:DescribeTags`
-
-### ECR
-- `ecr:CreateRepository`, `ecr:DeleteRepository`, `ecr:DescribeRepositories`
-- `ecr:PutLifecyclePolicy`, `ecr:GetLifecyclePolicy`
-- `ecr:PutImageScanningConfiguration`
-- `ecr:GetAuthorizationToken` (for pushing images)
-- `ecr:BatchCheckLayerAvailability`, `ecr:GetDownloadUrlForLayer`, `ecr:BatchGetImage` (for pulling images)
-
-### Application Load Balancer
-- `elasticloadbalancing:CreateLoadBalancer`, `elasticloadbalancing:DeleteLoadBalancer`, `elasticloadbalancing:DescribeLoadBalancers`
-- `elasticloadbalancing:CreateTargetGroup`, `elasticloadbalancing:DeleteTargetGroup`, `elasticloadbalancing:DescribeTargetGroups`
-- `elasticloadbalancing:CreateListener`, `elasticloadbalancing:DeleteListener`, `elasticloadbalancing:DescribeListeners`
-- `elasticloadbalancing:ModifyLoadBalancerAttributes`, `elasticloadbalancing:ModifyTargetGroupAttributes`
-- `elasticloadbalancing:AddTags`, `elasticloadbalancing:RemoveTags`
-
-### ECS
-- `ecs:CreateCluster`, `ecs:DeleteCluster`, `ecs:DescribeClusters`
-- `ecs:RegisterTaskDefinition`, `ecs:DeregisterTaskDefinition`, `ecs:DescribeTaskDefinition`
-- `ecs:CreateService`, `ecs:DeleteService`, `ecs:DescribeServices`, `ecs:UpdateService`
-- `ecs:RunTask`, `ecs:StopTask`, `ecs:DescribeTasks`
-
-### IAM
-- `iam:CreateRole`, `iam:DeleteRole`, `iam:GetRole`
-- `iam:AttachRolePolicy`, `iam:DetachRolePolicy`
-- `iam:PutRolePolicy`, `iam:DeleteRolePolicy`, `iam:GetRolePolicy`
-- `iam:PassRole` (for ECS task execution)
-- `iam:CreatePolicy`, `iam:DeletePolicy` (if creating custom policies)
-
-### CloudWatch Logs
-- `logs:CreateLogGroup`, `logs:DeleteLogGroup`, `logs:DescribeLogGroups`
-- `logs:PutRetentionPolicy`
-- `logs:CreateLogStream`, `logs:PutLogEvents` (for ECS tasks)
-
-### Secrets Manager / SSM (if using secrets)
-- `secretsmanager:GetSecretValue` (for Secrets Manager)
-- `ssm:GetParameters` (for SSM Parameter Store)
-
-### Example IAM Policy
-
-See `examples/terraform-deployment-policy.json` for a complete IAM policy that grants all required permissions.
-
-## Pushing Docker Images to ECR
-
-### Initial Setup
-
-1. **Create ECR repository** (done automatically by Terraform):
-   ```bash
-   terraform apply -target=module.ecr
-   ```
-
-2. **Get repository URL**:
-   ```bash
-   ECR_URL=$(terraform output -raw ecr_repository_url)
-   ```
-
-3. **Authenticate Docker to ECR**:
-   ```bash
-   aws ecr get-login-password --region <your-region> | \
-     docker login --username AWS --password-stdin $ECR_URL
-   ```
-
-### Building and Pushing Images
-
-```bash
-# Build your Docker image
-docker build -t myapp:latest .
-
-# Tag for ECR
-docker tag myapp:latest $ECR_URL:latest
-
-# Push to ECR
-docker push $ECR_URL:latest
-
-# Optional: Tag with version
-docker tag myapp:latest $ECR_URL:v1.0.0
-docker push $ECR_URL:v1.0.0
+```hcl
+web_enable_autoscaling         = true
+web_autoscaling_min_capacity   = 2
+web_autoscaling_max_capacity   = 4
+web_autoscaling_cpu_target     = 80
+web_autoscaling_memory_target  = 80
 ```
 
-### Updating the Application
+## Monitoring
 
-After pushing a new image:
+CloudWatch alarms are configured for:
 
-```bash
-# Update the ECS service to use the new image
-# Option 1: Update terraform.tfvars with new image tag and apply
-terraform apply
+- ALB 5xx errors (target and ELB)
+- ALB high response time
+- ALB unhealthy hosts
+- ECS high CPU / memory utilization
+- ECS no running tasks
+- RDS high CPU / low memory / low storage / high connections
+- ECS scaling events
 
-# Option 2: Force new deployment without changing image tag
-aws ecs update-service \
-  --cluster $(terraform output -raw ecs_cluster_name) \
-  --service $(terraform output -raw ecs_service_name) \
-  --force-new-deployment
-```
-
-## Accessing the Application
-
-### Via Application Load Balancer
-
-The application is accessible through the ALB DNS name:
-
-```bash
-# Get the ALB DNS name
-terraform output alb_dns_name
-
-# Access via HTTP
-curl http://<alb-dns-name>
-
-# If HTTPS is configured
-curl https://<alb-dns-name>
-```
-
-### Custom Domain (Optional)
-
-To use a custom domain:
-
-1. Create a Route 53 hosted zone for your domain
-2. Create an A record (alias) pointing to the ALB DNS name
-3. Request an ACM certificate for your domain
-4. Update `terraform.tfvars` with the certificate ARN
-5. Apply the changes: `terraform apply`
-
-### Health Checks
-
-The ALB performs health checks on the path `/` (configurable). Ensure your application responds with HTTP 200 on the health check path.
-
-### Troubleshooting Access Issues
-
-If you cannot access the application:
-
-1. **Check ECS task status**:
-   ```bash
-   aws ecs describe-services \
-     --cluster $(terraform output -raw ecs_cluster_name) \
-     --services $(terraform output -raw ecs_service_name)
-   ```
-
-2. **Check task health**:
-   ```bash
-   aws ecs list-tasks \
-     --cluster $(terraform output -raw ecs_cluster_name) \
-     --service-name $(terraform output -raw ecs_service_name)
-   ```
-
-3. **Check ALB target health**:
-   ```bash
-   aws elbv2 describe-target-health \
-     --target-group-arn <target-group-arn>
-   ```
-
-4. **Check container logs**:
-   ```bash
-   aws logs tail /ecs/$(terraform output -raw ecs_service_name) --follow
-   ```
-
-## Terraform State Management
-
-### Local State (Development)
-
-By default, Terraform stores state locally in `terraform.tfstate`. This is suitable for:
-- Individual development
-- Testing and experimentation
-- Single-user environments
-
-**Pros:**
-- Simple setup, no additional configuration
-- Fast operations
-
-**Cons:**
-- No collaboration support
-- No state locking
-- Risk of state file loss
-- No state versioning
-
-### Remote State (Production)
-
-For team environments and production deployments, use remote state with S3 backend.
-
-#### Setting Up Remote State
-
-1. **Create S3 bucket for state storage**:
-   ```bash
-   aws s3api create-bucket \
-     --bucket my-terraform-state-bucket \
-     --region us-east-1
-   
-   # Enable versioning
-   aws s3api put-bucket-versioning \
-     --bucket my-terraform-state-bucket \
-     --versioning-configuration Status=Enabled
-   
-   # Enable encryption
-   aws s3api put-bucket-encryption \
-     --bucket my-terraform-state-bucket \
-     --server-side-encryption-configuration '{
-       "Rules": [{
-         "ApplyServerSideEncryptionByDefault": {
-           "SSEAlgorithm": "AES256"
-         }
-       }]
-     }'
-   ```
-
-2. **Create DynamoDB table for state locking**:
-   ```bash
-   aws dynamodb create-table \
-     --table-name terraform-state-lock \
-     --attribute-definitions AttributeName=LockID,AttributeType=S \
-     --key-schema AttributeName=LockID,KeyType=HASH \
-     --billing-mode PAY_PER_REQUEST \
-     --region us-east-1
-   ```
-
-3. **Create backend configuration**:
-   ```bash
-   cp backend.tf.example backend.tf
-   # Edit backend.tf with your bucket and table names
-   ```
-
-4. **Initialize with remote backend**:
-   ```bash
-   terraform init -migrate-state
-   ```
-
-#### Backend Configuration
-
-See `backend.tf.example` for a complete backend configuration template.
-
-**Pros:**
-- Team collaboration with state locking
-- State versioning and history
-- Encrypted state storage
-- Backup and disaster recovery
-
-**Cons:**
-- Additional AWS resources required
-- Slightly slower operations
-- More complex setup
-
-### Switching Between Local and Remote State
-
-**From Local to Remote:**
-```bash
-# Create backend.tf with S3 configuration
-terraform init -migrate-state
-```
-
-**From Remote to Local:**
-```bash
-# Remove or rename backend.tf
-mv backend.tf backend.tf.disabled
-terraform init -migrate-state
-```
+Alerts are sent to the SNS topic subscribed to `alert_email`. Confirm the subscription email after first deploy.
 
 ## Outputs
 
-After deployment, Terraform provides these outputs:
+After deployment:
 
-| Output | Description |
-|--------|-------------|
-| `alb_dns_name` | DNS name of the ALB - use this to access your application |
-| `ecr_repository_url` | ECR repository URL - push your Docker images here |
-| `ecs_cluster_name` | Name of the ECS cluster |
-| `ecs_service_name` | Name of the ECS service |
-| `vpc_id` | ID of the VPC |
-| `public_subnet_id` | ID of the public subnet |
-| `private_subnet_id` | ID of the private subnet |
-| `nat_gateway_ip` | Elastic IP of the NAT Gateway |
-
-View outputs:
 ```bash
-# All outputs
-terraform output
-
-# Specific output
-terraform output alb_dns_name
-```
-
-## Module Structure
-
-```
-.
-├── main.tf                 # Root module orchestration
-├── variables.tf            # Root module variables
-├── outputs.tf              # Root module outputs
-├── versions.tf             # Terraform and provider versions
-├── terraform.tfvars        # Your configuration (not in git)
-├── terraform.tfvars.example # Example configuration
-├── backend.tf              # Backend configuration (optional)
-├── backend.tf.example      # Example backend configuration
-├── README.md               # This file
-├── modules/
-│   ├── vpc/                # VPC module
-│   │   ├── main.tf
-│   │   ├── variables.tf
-│   │   └── outputs.tf
-│   ├── nat/                # NAT Gateway module
-│   │   ├── main.tf
-│   │   ├── variables.tf
-│   │   └── outputs.tf
-│   ├── ecr/                # ECR module
-│   │   ├── main.tf
-│   │   ├── variables.tf
-│   │   └── outputs.tf
-│   ├── alb/                # Application Load Balancer module
-│   │   ├── main.tf
-│   │   ├── variables.tf
-│   │   ├── outputs.tf
-│   │   └── README.md
-│   └── ecs/                # ECS module
-│       ├── main.tf
-│       ├── variables.tf
-│       └── outputs.tf
-└── test/                   # Terratest tests
-    └── ...
+terraform output alb_dns_name           # Application URL
+terraform output ecr_repository_url     # ECR push target
+terraform output rds_endpoint           # Database endpoint
+terraform output redis_endpoint         # Redis endpoint
+terraform output pipeline_name          # CodePipeline name (if enabled)
 ```
 
 ## Common Operations
 
-### Updating the Infrastructure
+### Force New Deployment (no code change)
 
 ```bash
-# Review changes
-terraform plan
-
-# Apply changes
-terraform apply
+aws ecs update-service --cluster crema-prod-cluster --service crema-prod-web-service --force-new-deployment --region us-east-1
 ```
 
-### Scaling the Application
-
-Update `desired_count` in `terraform.tfvars`:
-```hcl
-desired_count = 4  # Scale to 4 tasks
-```
-
-Then apply:
-```bash
-terraform apply
-```
-
-### Destroying the Infrastructure
+### View Container Logs
 
 ```bash
-# Review what will be destroyed
-terraform plan -destroy
+aws logs tail /ecs/crema-prod-web-service --follow --region us-east-1
+```
 
-# Destroy all resources
+### Check Target Health
+
+```bash
+aws elbv2 describe-target-health --target-group-arn <TG_ARN> --region us-east-1
+```
+
+### Scale Manually
+
+Update `web_desired_count` in `terraform.tfvars` and run `terraform apply`, or:
+
+```bash
+aws ecs update-service --cluster crema-prod-cluster --service crema-prod-web-service --desired-count 3 --region us-east-1
+```
+
+### Destroy Infrastructure
+
+```bash
+# Delete ECR images first (required if repo has images)
+aws ecr delete-repository --repository-name crema-prod-app --force --region us-east-1
+
 terraform destroy
 ```
 
-**Warning:** This will delete all resources including the ECR repository and its images.
+**Warning**: If RDS has `deletion_protection = true`, you must disable it first via the AWS Console or by setting `rds_deletion_protection = false` and running `terraform apply` before destroy.
 
-## Security Best Practices
+## Multi-Environment Usage
 
-1. **Never commit sensitive data**:
-   - Add `terraform.tfvars` to `.gitignore`
-   - Use AWS Secrets Manager or SSM for sensitive values
-   - Never hardcode credentials in Terraform files
+This repo supports multiple environments by swapping `backend.tf` and `terraform.tfvars`:
 
-2. **Use remote state with encryption**:
-   - Enable S3 bucket encryption
-   - Enable S3 versioning for state history
-   - Use DynamoDB for state locking
+```bash
+# Switch to dev
+copy backend.tf.dev backend.tf
+copy terraform.tfvars.dev terraform.tfvars
+terraform init -reconfigure
 
-3. **Restrict IAM permissions**:
-   - Use least-privilege IAM policies
-   - Avoid using root AWS account
-   - Use IAM roles for ECS tasks
+# Switch back to prod
+copy backend.tf.prod backend.tf
+copy terraform.tfvars.prod terraform.tfvars
+terraform init -reconfigure
+```
 
-4. **Enable HTTPS**:
-   - Request ACM certificate for your domain
-   - Configure `certificate_arn` in `terraform.tfvars`
-   - Redirect HTTP to HTTPS (optional)
+Each environment uses a separate S3 state bucket and AWS account/credentials.
 
-5. **Monitor and audit**:
-   - Enable CloudWatch Container Insights
-   - Review CloudWatch logs regularly
-   - Enable AWS CloudTrail for API auditing
+## Fargate Sizing Reference
 
-## Troubleshooting
+| CPU (vCPU) | Valid Memory Range |
+|------------|-------------------|
+| 256 (0.25) | 512, 1024, 2048 MB |
+| 512 (0.5)  | 1024 – 4096 MB |
+| 1024 (1)   | 2048 – 8192 MB |
+| 2048 (2)   | 4096 – 16384 MB |
+| 4096 (4)   | 8192 – 30720 MB |
 
-### Terraform Errors
+See `docs/FARGATE_SIZING.md` for detailed guidance.
 
-**Error: Invalid CIDR block**
-- Ensure CIDR blocks are valid IPv4 notation (e.g., `10.0.0.0/16`)
-- Ensure subnet CIDRs are within VPC CIDR range
-- Ensure subnet CIDRs don't overlap
+## Security Notes
 
-**Error: Invalid CPU/Memory combination**
-- Check the valid combinations table above
-- Ensure CPU and memory values are strings (e.g., `"256"`, not `256`)
+- `terraform.tfvars`, `backend.tf`, `*.env`, and `*.tfstate` are gitignored — never commit these
+- All secrets are stored in SSM Parameter Store and referenced by ARN
+- ECS tasks run in private subnets with no public IPs
+- RDS and Redis are only accessible from ECS security groups
+- S3 artifact bucket has public access blocked and KMS encryption
+- IAM roles follow least-privilege principles
 
-**Error: State locked**
-- Another Terraform process is running
-- Wait for it to complete or force unlock: `terraform force-unlock <lock-id>`
+## Cost Estimate (Monthly, us-east-1)
 
-### Deployment Issues
+| Resource | Configuration | Approx. Cost |
+|----------|--------------|-------------|
+| NAT Gateway | 1 gateway | ~$32 |
+| ALB | 1 load balancer | ~$16 |
+| ECS Web | 2 tasks × 2 vCPU / 14 GB | ~$170 |
+| ECS Sidekiq | 1 task × 1 vCPU / 2 GB | ~$36 |
+| RDS | db.t4g.medium, 50 GB | ~$55 |
+| Redis | cache.t4g.micro | ~$12 |
+| CloudWatch | Logs + alarms | ~$5 |
+| CodePipeline | 1 pipeline | ~$1 |
+| **Total (2 web tasks)** | | **~$400/month** |
+| **Total (4 web tasks, max auto-scale)** | | **~$611/month** |
 
-**ECS tasks not starting**
-- Check CloudWatch logs: `aws logs tail /ecs/<service-name> --follow`
-- Verify container image exists in ECR
-- Check IAM permissions for task execution role
-- Verify CPU/memory limits are sufficient
-
-**Cannot access application via ALB**
-- Wait 2-3 minutes for tasks to start and pass health checks
-- Check target health: `aws elbv2 describe-target-health --target-group-arn <arn>`
-- Verify security group rules allow traffic
-- Check container is listening on correct port
-
-**Image pull errors**
-- Verify ECR repository URL is correct
-- Check task execution role has ECR permissions
-- Ensure image exists: `aws ecr describe-images --repository-name <name>`
-
-## Cost Estimation
-
-Approximate monthly costs (us-east-1, as of 2024):
-
-| Resource | Configuration | Estimated Cost |
-|----------|--------------|----------------|
-| NAT Gateway | 1 gateway | ~$32/month + data transfer |
-| Application Load Balancer | 1 ALB | ~$16/month + LCU charges |
-| ECS Fargate | 2 tasks (256 CPU, 512 MB) | ~$15/month |
-| ECR Storage | 1 GB | ~$0.10/month |
-| CloudWatch Logs | 1 GB ingestion | ~$0.50/month |
-| **Total** | | **~$64/month** |
-
-**Notes:**
-- Costs vary by region and usage
-- Data transfer charges apply
-- Use [AWS Pricing Calculator](https://calculator.aws/) for accurate estimates
-
-## Contributing
-
-Contributions are welcome! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Support
-
-For issues and questions:
-- Check the [Troubleshooting](#troubleshooting) section
-- Review [AWS ECS documentation](https://docs.aws.amazon.com/ecs/)
-- Review [Terraform AWS Provider documentation](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
-
-## Acknowledgments
-
-Built with:
-- [Terraform](https://www.terraform.io/)
-- [AWS ECS](https://aws.amazon.com/ecs/)
-- [AWS Fargate](https://aws.amazon.com/fargate/)
+Costs vary by usage and data transfer. Use the [AWS Pricing Calculator](https://calculator.aws/) for precise estimates.
