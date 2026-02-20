@@ -322,41 +322,9 @@ resource "aws_cloudwatch_metric_alarm" "rds_memory_low" {
   }
 }
 
-# =============================================================================
-# ECS Auto-Scaling Event Notifications
-# =============================================================================
 
-# EventBridge rule to capture ECS service scaling events
-resource "aws_cloudwatch_event_rule" "ecs_scaling" {
-  name        = "${var.project_name}-ecs-scaling-events"
-  description = "Capture ECS service scaling events (scale in/out)"
 
-  event_pattern = jsonencode({
-    source      = ["aws.ecs"]
-    detail-type = ["ECS Service Action"]
-    detail = {
-      clusterArn = [{ "suffix" : "/${var.ecs_cluster_name}" }]
-      eventType  = ["INFO"]
-      eventName  = [
-        "SERVICE_STEADY_STATE",
-        "SERVICE_DESIRED_COUNT_UPDATED"
-      ]
-    }
-  })
-
-  tags = {
-    ManagedBy = "Terraform"
-    Module    = "monitoring"
-  }
-}
-
-resource "aws_cloudwatch_event_target" "ecs_scaling_sns" {
-  rule      = aws_cloudwatch_event_rule.ecs_scaling.name
-  target_id = "send-to-sns"
-  arn       = aws_sns_topic.alerts.arn
-}
-
-# Allow EventBridge to publish to SNS
+# Allow EventBridge to publish to SNS (kept for future use)
 resource "aws_sns_topic_policy" "alerts" {
   arn = aws_sns_topic.alerts.arn
 
